@@ -1,0 +1,154 @@
+name: TASK MANAGER - CI/CD
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+      - infra/devops
+  pull_request:
+    branches:
+      - dev
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  IMAGE_API_NAME: ${{ vars.IMAGE_API_NAME }}
+
+jobs:
+
+  # ============================================================
+  # JOB 1 — BUILD & PUSH IMAGES
+  # ============================================================
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN}}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      - name: Generate short SHA
+        id: vars
+        run: echo "SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Build & Push API Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: ${{ github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main' }}
+          tags: |
+            ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/${{ vars.IMAGE_API_NAME }}:${{ steps.vars.outputs.SHA_SHORT }}
+          labels: |
+            org.opencontainers.image.title=taskmanager-api
+
+  # ============================================================
+  # JOB 2 — DEPLOY STAGING
+  # Uniquement sur dev
+  # ============================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/dev'
+    environment:
+      name: staging
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Get short SHA
+        id: vars
+        run: echo "SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Copy compose file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          source: "docker/docker-compose.staging.yml, scripts/deploy.sh"
+          target: ${{ vars.DEPLOY_PATH }}
+          strip_components: 1
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          script: |
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+
+            cd ${{ vars.DEPLOY_PATH }}
+            mv docker-compose.staging.yml docker-compose.yml
+            chmod +x deploy.sh
+            bash deploy.sh ${{ steps.vars.outputs.SHA_SHORT }}
+
+  # ============================================================
+  # JOB 3 — DEPLOY PRODUCTION
+  # Uniquement sur main (merge depuis dev)
+  # Validation humaine requise via environment protection
+  # ============================================================
+#   deploy-production:
+#     name: Deploy to Production
+#     runs-on: ubuntu-latest
+#     needs: build
+#     if: github.ref == 'refs/heads/main'
+#     environment:
+#       name: production
+
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v6
+
+#       - name: Get short SHA
+#         id: vars
+#         run: echo "SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+#       - name: Copy compose file to server
+#         uses: appleboy/scp-action@v0.1.7
+#         with:
+#           host: ${{ secrets.SERVER_HOST }}
+#           username: ${{ secrets.SERVER_USER }}
+#           key: ${{ secrets.SERVER_SSH_KEY }}
+#           port: ${{ secrets.SERVER_SSH_PORT }}
+#           source: "docker/docker-compose.production.yml, scripts/deploy-production.sh"
+#           target: ${{ vars.DEPLOY_PATH }}
+#           strip_components: 1
+
+#       - name: Deploy
+#         uses: appleboy/ssh-action@v1.0.3
+#         with:
+#           host: ${{ secrets.SERVER_HOST }}
+#           username: ${{ secrets.SERVER_USER }}
+#           key: ${{ secrets.SERVER_SSH_KEY }}
+#           port: ${{ secrets.SERVER_SSH_PORT }}
+#           script: |
+#             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io \
+#               -u "${{ github.repository_owner }}" --password-stdin
+
+#             cd ${{ vars.DEPLOY_PATH }}
+#             mv docker-compose.production.yml docker-compose.yml
+#             chmod +x deploy-production.sh
+#             bash deploy-production.sh ${{ steps.vars.outputs.SHA_SHORT }}
