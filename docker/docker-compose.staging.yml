@@ -3,7 +3,7 @@ services:
     image: 010526282379.dkr.ecr.us-east-1.amazonaws.com/taskmanager-api:${IMAGE_TAG}
     container_name: task-api
     ports:
-      - "3000:3000"
+      - "3001:3000"
     env_file:
       - .env
     restart: unless-stopped
