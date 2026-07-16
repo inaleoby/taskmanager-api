@@ -39,7 +39,7 @@ echo "🔍 Attente du health check (max $((MAX_RETRIES * RETRY_INTERVAL))s)..."
 STATUS=""
 
 for i in $(seq 1 $MAX_RETRIES); do
-  STATUS=$(docker inspect pdj_api --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+  STATUS=$(docker inspect task-api --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
   echo "Tentative $i/$MAX_RETRIES — status: $STATUS"
 
   if [ "$STATUS" = "healthy" ]; then
