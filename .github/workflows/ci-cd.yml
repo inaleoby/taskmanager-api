@@ -141,7 +141,7 @@ jobs:
         run: |
           aws ecs describe-task-definition \
             --task-definition taskmanager-api \
-            --query taskDef \
+            --query taskDefinition \
             --output json > task-def.json
 
       - name: Update image in task definition
