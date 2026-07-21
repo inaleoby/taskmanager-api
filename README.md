@@ -1,12 +1,15 @@
 # Task Manager — Backend API
 
+
 API de gestion de tâches (Express.js), déployée sur deux environnements AWS : staging (EC2 + Docker Compose) et production (ECS Fargate + RDS PostgreSQL), avec CI/CD GitHub Actions et rollback automatique sur les deux.
 
-Documentation détaillée (historique, erreurs rencontrées, corrections) : [`documentation-complete-backend.md`](./documentation-complete-backend.md)
-Schéma d'architecture : [`taskmanager-architecture.drawio`](./taskmanager-architecture.drawio) (à ouvrir sur [app.diagrams.net](https://app.diagrams.net))
+Documentation détaillée (historique, erreurs rencontrées, corrections) : [`docs/documentation-complete-backend.pdf`](./docs/documentation-complete-backend.md)
+
+Schéma d'architecture :
+
+![Architecture Task Manager](./docs/architecture-diagram.png)
 
 ---
-
 ## Architecture
 
 ```
